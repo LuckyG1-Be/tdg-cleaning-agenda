@@ -16,8 +16,15 @@ const Patch = z.object({
     endTime: z.string().nullable().optional(),
     rrule: z.string().nullable().optional(),
     untilDate: z.string().nullable().optional(), // YYYY-MM-DD
+    startDate: z.string().nullable().optional(), // YYYY-MM-DD (for non-recurring or ALL if needed)
   }),
 });
+
+export async function GET(_req: Request, ctx: { params: { id: string } }) {
+  const item = await prisma.appointmentSeries.findUnique({ where: { id: ctx.params.id } });
+  if (!item) return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
+  return NextResponse.json({ ok: true, item });
+}
 
 export async function PATCH(req: Request, ctx: { params: { id: string } }) {
   const { mode, occurrenceDate, patch } = Patch.parse(await req.json());
@@ -26,8 +33,21 @@ export async function PATCH(req: Request, ctx: { params: { id: string } }) {
   const series = await prisma.appointmentSeries.findUnique({ where: { id } });
   if (!series) return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
 
+  const untilDate =
+    patch.untilDate === undefined
+      ? undefined
+      : patch.untilDate
+      ? new Date(patch.untilDate + "T00:00:00")
+      : null;
+
+  const startDate =
+    patch.startDate === undefined
+      ? undefined
+      : patch.startDate
+      ? new Date(patch.startDate + "T00:00:00")
+      : null;
+
   if (mode === "ALL") {
-    const untilDate = patch.untilDate === undefined ? undefined : (patch.untilDate ? new Date(patch.untilDate + "T00:00:00") : null);
     const updated = await prisma.appointmentSeries.update({
       where: { id },
       data: {
@@ -39,6 +59,7 @@ export async function PATCH(req: Request, ctx: { params: { id: string } }) {
         endTime: patch.endTime ?? undefined,
         rrule: patch.rrule ?? undefined,
         untilDate,
+        startDate: startDate ?? undefined, // allow moving (useful for non-recurring)
       },
     });
     return NextResponse.json({ ok: true, item: updated });
@@ -85,12 +106,15 @@ export async function PATCH(req: Request, ctx: { params: { id: string } }) {
 
   const untilOld = await prisma.appointmentSeries.update({
     where: { id },
-    data: {
-      untilDate: dayBefore,
-    },
+    data: { untilDate: dayBefore },
   });
 
-  const newUntil = patch.untilDate === undefined ? series.untilDate : (patch.untilDate ? new Date(patch.untilDate + "T00:00:00") : null);
+  const newUntil =
+    patch.untilDate === undefined
+      ? series.untilDate
+      : patch.untilDate
+      ? new Date(patch.untilDate + "T00:00:00")
+      : null;
 
   const created = await prisma.appointmentSeries.create({
     data: {
@@ -103,7 +127,7 @@ export async function PATCH(req: Request, ctx: { params: { id: string } }) {
       endTime: patch.endTime === undefined ? series.endTime : (patch.endTime ?? series.endTime),
       rrule: patch.rrule === undefined ? series.rrule : patch.rrule,
       untilDate: newUntil,
-      timezone: "Europe/Brussels",
+      timezone: series.timezone || "Europe/Brussels",
     },
   });
 
