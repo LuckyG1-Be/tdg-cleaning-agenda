@@ -16,6 +16,7 @@ type EventItem = {
   seriesId: string;
   dateKey: string; // YYYY-MM-DD
   extendedProps: {
+    seriesId?: string;
     customerId: string | null;
     description: string | null;
     notes: string | null;
@@ -29,9 +30,9 @@ type Series = {
   title: string | null;
   description: string | null;
   notes: string | null;
-  startDate: string;  // ISO
-  startTime: string;  // HH:mm
-  endTime: string;    // HH:mm
+  startDate: string; // ISO
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
   rrule: string | null;
   untilDate: string | null; // ISO or null
 };
@@ -51,14 +52,26 @@ function isoToDateKey(iso: string) {
   const d = new Date(iso);
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
+function addDays(d: Date, days: number) {
+  const x = new Date(d);
+  x.setDate(x.getDate() + days);
+  return x;
+}
 
 export default function CalendarClient() {
-  const calRef = useRef<FullCalendar | null>(null);
+  const calRef = useRef<any>(null);
 
   const [events, setEvents] = useState<EventItem[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // track visible range so we can also build the upcoming list
+  const [visibleRange, setVisibleRange] = useState<{ start: Date; end: Date } | null>(null);
+
+  // upcoming list
+  const [upcomingQ, setUpcomingQ] = useState("");
+  const UPCOMING_DAYS = 180;
 
   // Create form
   const [form, setForm] = useState({
@@ -80,8 +93,7 @@ export default function CalendarClient() {
   const [edit, setEdit] = useState<null | {
     seriesId: string;
     occurrenceDate: string; // clicked occurrence YYYY-MM-DD
-    // editable fields:
-    date: string; // YYYY-MM-DD (for moving only-this OR single appointment)
+    date: string; // YYYY-MM-DD
     customerId: string | null;
     startTime: string;
     endTime: string;
@@ -89,30 +101,36 @@ export default function CalendarClient() {
     notes: string;
 
     isRecurring: boolean;
-    baseSeries: Series | null; // fetched from API
+    baseSeries: Series | null;
     mode: "ONLY_THIS" | "FUTURE" | "ALL";
-    recurrence: RecurrenceValue; // used for ALL/FUTURE mainly
+    recurrence: RecurrenceValue;
   }>(null);
 
   async function loadCustomers() {
-    const r = await fetch("/api/customers");
+    const r = await fetch("/api/customers", { cache: "no-store" });
     const j = await r.json();
     if (j.ok) setCustomers(j.items);
   }
 
-  async function refetchEvents() {
-    const api = (calRef.current as any)?.getApi?.();
-    if (!api) return;
-    const view = api.view;
-    const start = view.activeStart.toISOString();
-    const end = view.activeEnd.toISOString();
-    const r = await fetch(`/api/calendar/events?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
+  async function fetchEventsInRange(startIso: string, endIso: string) {
+    const r = await fetch(
+      `/api/calendar/events?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}`,
+      { cache: "no-store" }
+    );
     const j = await r.json();
     if (j.ok) setEvents(j.events);
   }
 
+  async function refetchVisibleEvents() {
+    const api = calRef.current?.getApi?.();
+    if (!api) return;
+    const startIso = api.view.activeStart.toISOString();
+    const endIso = api.view.activeEnd.toISOString();
+    await fetchEventsInRange(startIso, endIso);
+  }
+
   async function fetchSeries(seriesId: string): Promise<Series | null> {
-    const r = await fetch(`/api/series/${seriesId}`);
+    const r = await fetch(`/api/series/${seriesId}`, { cache: "no-store" });
     const j = await r.json();
     if (!j.ok) return null;
     return j.item as Series;
@@ -120,6 +138,14 @@ export default function CalendarClient() {
 
   useEffect(() => {
     loadCustomers();
+  }, []);
+
+  // IMPORTANT: on mount, try to fetch once (fix “events verdwenen” bij terugkomen)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      refetchVisibleEvents();
+    }, 0);
+    return () => clearTimeout(t);
   }, []);
 
   const customerOptions = useMemo(
@@ -130,6 +156,12 @@ export default function CalendarClient() {
       })),
     [customers]
   );
+
+  const customerLabelById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of customers) m.set(c.id, customerLabel(c as any) || "Klant");
+    return m;
+  }, [customers]);
 
   async function createAppointment(e: React.FormEvent) {
     e.preventDefault();
@@ -161,7 +193,7 @@ export default function CalendarClient() {
       setForm({ customerId: "", date: "", startTime: "09:00", endTime: "10:00", description: "", notes: "" });
       setCreateRecurrence({ mode: "NONE", rrule: null, untilDate: null });
 
-      await refetchEvents();
+      await refetchVisibleEvents();
     } catch (e: any) {
       setError(e?.message || "Opslaan mislukt");
     } finally {
@@ -176,11 +208,10 @@ export default function CalendarClient() {
     const start: Date = arg.event.start;
     const end: Date = arg.event.end;
 
-    const occurrenceDate = xp.dateKey as string; // YYYY-MM-DD from our API
+    const occurrenceDate = xp.dateKey as string; // YYYY-MM-DD from API
     const seriesId = xp.seriesId as string;
 
     const series = await fetchSeries(seriesId);
-
     const isRecurring = !!xp.isRecurring;
 
     setEdit({
@@ -210,7 +241,6 @@ export default function CalendarClient() {
     setError(null);
 
     try {
-      // 1) ONE-OFF or non-recurring: we update the series directly (ALL)
       if (!edit.isRecurring) {
         const payload = {
           mode: "ALL",
@@ -220,7 +250,6 @@ export default function CalendarClient() {
             notes: edit.notes || null,
             startTime: edit.startTime,
             endTime: edit.endTime,
-            // allow moving date for non-recurring:
             startDate: edit.date,
             rrule: null,
             untilDate: null,
@@ -236,13 +265,11 @@ export default function CalendarClient() {
         if (!j.ok) throw new Error(j.error || "Wijzigen mislukt");
 
         setEdit(null);
-        await refetchEvents();
+        await refetchVisibleEvents();
         return;
       }
 
-      // 2) Recurring series
       if (edit.mode === "ONLY_THIS") {
-        // If date unchanged: just override fields for this occurrence
         if (edit.date === edit.occurrenceDate) {
           const payload = {
             mode: "ONLY_THIS",
@@ -265,13 +292,11 @@ export default function CalendarClient() {
           if (!j.ok) throw new Error(j.error || "Wijzigen mislukt");
 
           setEdit(null);
-          await refetchEvents();
+          await refetchVisibleEvents();
           return;
         }
 
-        // If date changed: move THIS occurrence
-        // - delete old occurrence
-        // - create a new single appointment on new date
+        // Move only this occurrence:
         const del = await fetch(`/api/series/${edit.seriesId}/occurrence/delete`, {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -299,16 +324,13 @@ export default function CalendarClient() {
         if (!createJ.ok) throw new Error(createJ.error || "Verplaatsen mislukt (create)");
 
         setEdit(null);
-        await refetchEvents();
+        await refetchVisibleEvents();
         return;
       }
 
-      // 3) FUTURE or ALL: update recurrence + fields.
-      // Note: moving the actual "date" of the series is not done via date input here
-      // (you can change recurrence days instead). Date input is disabled in these modes.
       const payload = {
         mode: edit.mode,
-        occurrenceDate: edit.occurrenceDate, // needed for FUTURE split
+        occurrenceDate: edit.occurrenceDate,
         patch: {
           customerId: edit.customerId,
           description: edit.description || null,
@@ -329,7 +351,7 @@ export default function CalendarClient() {
       if (!j.ok) throw new Error(j.error || "Wijzigen mislukt");
 
       setEdit(null);
-      await refetchEvents();
+      await refetchVisibleEvents();
     } catch (e: any) {
       setError(e?.message || "Wijzigen mislukt");
     } finally {
@@ -343,7 +365,6 @@ export default function CalendarClient() {
     setError(null);
 
     try {
-      // recurring + ONLY_THIS => delete that occurrence
       if (edit.isRecurring && edit.mode === "ONLY_THIS") {
         const r = await fetch(`/api/series/${edit.seriesId}/occurrence/delete`, {
           method: "POST",
@@ -353,14 +374,13 @@ export default function CalendarClient() {
         const j = await r.json();
         if (!j.ok) throw new Error(j.error || "Verwijderen mislukt");
       } else {
-        // delete series entirely
         const r = await fetch(`/api/series/${edit.seriesId}`, { method: "DELETE" });
         const j = await r.json();
         if (!j.ok) throw new Error(j.error || "Verwijderen mislukt");
       }
 
       setEdit(null);
-      await refetchEvents();
+      await refetchVisibleEvents();
     } catch (e: any) {
       setError(e?.message || "Verwijderen mislukt");
     } finally {
@@ -368,12 +388,58 @@ export default function CalendarClient() {
     }
   }
 
+  // Build upcoming list from “now -> now+UPCOMING_DAYS”
+  const upcomingRange = useMemo(() => {
+    const now = new Date();
+    return { start: now, end: addDays(now, UPCOMING_DAYS) };
+  }, []);
+
+  const upcomingItems = useMemo(() => {
+    const now = new Date();
+    const q = (upcomingQ || "").trim().toLowerCase();
+
+    const list = (events || [])
+      .map((ev) => {
+        const s = new Date(ev.start);
+        const e = new Date(ev.end);
+        const xp = ev.extendedProps || ({} as any);
+        const customerName = xp.customerId ? customerLabelById.get(xp.customerId) || "" : "";
+        const text = `${customerName} ${xp.description || ""} ${xp.notes || ""}`.toLowerCase();
+
+        return {
+          key: `${ev.seriesId}:${ev.dateKey}:${ev.id}`,
+          seriesId: ev.seriesId,
+          dateKey: ev.dateKey,
+          start: s,
+          end: e,
+          customerName,
+          description: xp.description || "",
+          notes: xp.notes || "",
+          text,
+        };
+      })
+      .filter((x) => x.start >= now)
+      .filter((x) => x.start <= upcomingRange.end)
+      .filter((x) => (!q ? true : x.text.includes(q)))
+      .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+    return list;
+  }, [events, upcomingQ, customerLabelById, upcomingRange.end]);
+
+  function gotoDate(dateKey: string) {
+    const api = calRef.current?.getApi?.();
+    if (!api) return;
+    api.gotoDate(dateKey);
+    // switch to week view for clarity
+    api.changeView("timeGridWeek");
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       {/* Calendar */}
       <div className="lg:col-span-2 bg-white rounded-2xl border border-zinc-200 shadow-sm p-3">
         <FullCalendar
-          ref={calRef as any}
+          ref={calRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
           initialView="timeGridWeek"
           headerToolbar={{
@@ -384,20 +450,70 @@ export default function CalendarClient() {
           height="auto"
           events={events as any}
           eventClick={onEventClick}
-          datesSet={() => {
-            refetchEvents();
-          }}
           nowIndicator
 
           // 24u + uu:mm
           locale="nl"
           eventTimeFormat={{ hour: "2-digit", minute: "2-digit", hour12: false }}
           slotLabelFormat={{ hour: "2-digit", minute: "2-digit", hour12: false }}
+
+          datesSet={(info) => {
+            setVisibleRange({ start: info.start, end: info.end });
+            // Key fix: fetch using info (works reliably after navigation)
+            fetchEventsInRange(info.start.toISOString(), info.end.toISOString());
+          }}
         />
       </div>
 
       {/* Side panels */}
       <div className="space-y-4">
+        {/* Upcoming list */}
+        <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm p-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="font-semibold">Toekomstige afspraken</div>
+            <button
+              className="text-xs text-zinc-600 hover:text-zinc-900"
+              onClick={() => refetchVisibleEvents()}
+            >
+              Refresh
+            </button>
+          </div>
+
+          <input
+            className="mt-2 w-full rounded-xl border border-zinc-200 px-3 py-2"
+            placeholder="Zoek (klant, omschrijving, notities)…"
+            value={upcomingQ}
+            onChange={(e) => setUpcomingQ(e.target.value)}
+          />
+
+          <div className="mt-3 max-h-[38vh] overflow-auto divide-y divide-zinc-100">
+            {upcomingItems.length ? (
+              upcomingItems.map((it) => (
+                <button
+                  key={it.key}
+                  className="w-full text-left py-3 px-2 rounded-xl hover:bg-zinc-50"
+                  onClick={() => gotoDate(it.dateKey)}
+                >
+                  <div className="text-sm font-medium">
+                    {it.customerName || "Afspraak"}{" "}
+                    <span className="text-zinc-500 font-normal">
+                      • {it.dateKey} • {hhmm(it.start)}–{hhmm(it.end)}
+                    </span>
+                  </div>
+                  {it.description ? <div className="text-xs text-zinc-600 mt-1">{it.description}</div> : null}
+                  {it.notes ? <div className="text-xs text-zinc-400 mt-1">{it.notes}</div> : null}
+                </button>
+              ))
+            ) : (
+              <div className="text-sm text-zinc-500 py-6 text-center">Geen afspraken gevonden</div>
+            )}
+          </div>
+
+          <div className="text-xs text-zinc-500 mt-2">
+            Toont afspraken vanaf nu tot +{UPCOMING_DAYS} dagen.
+          </div>
+        </div>
+
         {/* Create */}
         <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm p-4">
           <div className="font-semibold mb-2">Nieuwe afspraak</div>
@@ -425,12 +541,7 @@ export default function CalendarClient() {
                 type="date"
                 className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2"
                 value={form.date}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  setForm((f) => ({ ...f, date: next }));
-                  // keep recurrence base-date aligned
-                  setCreateRecurrence((r) => ({ ...r }));
-                }}
+                onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
                 required
               />
             </div>
@@ -516,10 +627,6 @@ export default function CalendarClient() {
                   <option value="FUTURE">Alle toekomstige afspraken</option>
                   <option value="ALL">De volledige reeks</option>
                 </select>
-
-                <div className="text-xs text-zinc-500 mt-1">
-                  Tip: “Alleen deze” kan je ook verplaatsen naar een andere dag.
-                </div>
               </div>
             ) : null}
 
@@ -529,9 +636,7 @@ export default function CalendarClient() {
                 <select
                   className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2"
                   value={edit.customerId || ""}
-                  onChange={(e) =>
-                    setEdit((ed) => (ed ? { ...ed, customerId: e.target.value || null } : ed))
-                  }
+                  onChange={(e) => setEdit((ed) => (ed ? { ...ed, customerId: e.target.value || null } : ed))}
                 >
                   <option value="">(geen)</option>
                   {customerOptions.map((o) => (
@@ -553,11 +658,6 @@ export default function CalendarClient() {
                   disabled={edit.isRecurring && edit.mode !== "ONLY_THIS"}
                   onChange={(e) => setEdit((ed) => (ed ? { ...ed, date: e.target.value } : ed))}
                 />
-                {edit.isRecurring && edit.mode !== "ONLY_THIS" ? (
-                  <div className="text-xs text-zinc-500 mt-1">
-                    Wil je de dag wijzigen? Kies “Alleen deze afspraak” (verplaatsen) of pas BYDAY aan in recurrentie.
-                  </div>
-                ) : null}
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -581,7 +681,6 @@ export default function CalendarClient() {
                 </div>
               </div>
 
-              {/* Recurrence builder */}
               {edit.isRecurring ? (
                 <div className="pt-2 border-t border-zinc-100">
                   <RecurrenceBuilder
@@ -590,11 +689,6 @@ export default function CalendarClient() {
                     disabled={edit.mode === "ONLY_THIS"}
                     onChange={(v) => setEdit((ed) => (ed ? { ...ed, recurrence: v } : ed))}
                   />
-                  {edit.mode === "ONLY_THIS" ? (
-                    <div className="text-xs text-zinc-500 mt-1">
-                      Recurrentie wijzigen kan via “Alle toekomstige” of “Volledige reeks”.
-                    </div>
-                  ) : null}
                 </div>
               ) : null}
 
@@ -635,22 +729,12 @@ export default function CalendarClient() {
                 </button>
               </div>
 
-              <button
-                onClick={() => setEdit(null)}
-                className="w-full text-sm text-zinc-600 hover:text-zinc-900"
-              >
+              <button onClick={() => setEdit(null)} className="w-full text-sm text-zinc-600 hover:text-zinc-900">
                 Sluiten
               </button>
             </div>
           </div>
-        ) : (
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm p-4">
-            <div className="font-semibold mb-1">Tip</div>
-            <div className="text-sm text-zinc-600">
-              Klik op een afspraak in de agenda om te wijzigen, verplaatsen of recurrentie aan te passen.
-            </div>
-          </div>
-        )}
+        ) : null}
       </div>
     </div>
   );
