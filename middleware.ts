@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isAuthedFromRequest } from "@/lib/auth";
 
-const PUBLIC_PATHS = [
-  "/login",
-  "/api/auth/login",
-];
+const PUBLIC_PATHS = ["/login", "/api/auth/login"];
+const COOKIE_NAME = "tdg_session";
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // allow next internals & static
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
@@ -22,8 +18,8 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const authed = isAuthedFromRequest(req);
-  if (!authed) {
+  const token = req.cookies.get(COOKIE_NAME)?.value;
+  if (!token) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", pathname);
