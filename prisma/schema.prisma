@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  firstName String? 
+  lastName  String?
+  company   String?
+  street    String?
+  number    String?
+  box       String?
+  postal    String?
+  city      String?
+  country   String?
+
+  email     String?
+  phone     String?
+  vat       String?
+  type      CustomerType? // PRIVATE | BUSINESS
+  notes     String?
+
+  defaultRecurrence String? // free text e.g. "om de 6 weken"
+
+  series    AppointmentSeries[]
+
+  @@index([lastName])
+  @@index([company])
+  @@index([city])
+}
+
+enum CustomerType {
+  PRIVATE
+  BUSINESS
+}
+
+model AppointmentSeries {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  customerId  String?
+  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  title       String?  // shown in calendar, defaults to customer name
+  description String?
+  notes       String?
+
+  // time window for each occurrence
+  startTime   String   // "HH:mm"
+  endTime     String   // "HH:mm"
+  timezone    String   @default("Europe/Brussels")
+
+  // recurrence rule in iCalendar RRULE format; null => single appointment (one date)
+  rrule       String?
+  // base date of the first occurrence (local date)
+  startDate   DateTime
+
+  // optional end date (inclusive) for recurrence; if null, unlimited
+  untilDate   DateTime?
+
+  exceptions  AppointmentException[]
+
+  @@index([startDate])
+  @@index([customerId])
+}
+
+model AppointmentException {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  seriesId  String
+  series    AppointmentSeries @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+
+  // local date of the occurrence this applies to
+  date      DateTime
+
+  // if true => occurrence is deleted
+  isDeleted Boolean @default(false)
+
+  // override fields (nullable = not overridden)
+  customerId  String?
+  title       String?
+  description String?
+  notes       String?
+  startTime   String?
+  endTime     String?
+
+  @@unique([seriesId, date])
+  @@index([date])
+}
