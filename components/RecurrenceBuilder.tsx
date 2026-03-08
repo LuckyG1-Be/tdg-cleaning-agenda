@@ -2,17 +2,25 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type Mode = "NONE" | "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY" | "CUSTOM";
+type Mode =
+  | "NONE"
+  | "DAILY"
+  | "WEEKLY"
+  | "WEEKLY_4"
+  | "WEEKLY_6"
+  | "WEEKLY_8"
+  | "MONTHLY"
+  | "YEARLY"
+  | "CUSTOM";
 
 export type RecurrenceValue = {
-  rrule: string | null;      // without "RRULE:"
-  untilDate: string | null;  // YYYY-MM-DD
+  rrule: string | null;
+  untilDate: string | null;
   mode: Mode;
-  raw?: string;              // for CUSTOM
+  raw?: string;
 };
 
 type Props = {
-  /** Base date used for MONTHLY/YEARLY day-of-month defaults */
   baseDate: string; // YYYY-MM-DD
   value: RecurrenceValue;
   onChange: (v: RecurrenceValue) => void;
@@ -29,20 +37,35 @@ const WEEKDAYS = [
   { key: "SU", label: "Zo" },
 ] as const;
 
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
+function detectModeFromRRULE(rrule: string | null): Mode {
+  if (!rrule) return "NONE";
+  const raw = rrule.replace(/^RRULE:/i, "").toUpperCase();
+
+  if (raw === "FREQ=WEEKLY;INTERVAL=4") return "WEEKLY_4";
+  if (raw === "FREQ=WEEKLY;INTERVAL=6") return "WEEKLY_6";
+  if (raw === "FREQ=WEEKLY;INTERVAL=8") return "WEEKLY_8";
+
+  if (raw.startsWith("FREQ=DAILY")) return "DAILY";
+  if (raw.startsWith("FREQ=WEEKLY")) return "WEEKLY";
+  if (raw.startsWith("FREQ=MONTHLY")) return "MONTHLY";
+  if (raw.startsWith("FREQ=YEARLY")) return "YEARLY";
+
+  return "CUSTOM";
 }
 
 function dayOfMonth(yyyyMmDd: string) {
   const d = new Date(yyyyMmDd + "T00:00:00");
   return d.getDate();
 }
+
 function monthOfYear(yyyyMmDd: string) {
   const d = new Date(yyyyMmDd + "T00:00:00");
   return d.getMonth() + 1;
 }
 
-function parseSimpleRRULE(rrule: string | null): Partial<{
+function parseSimpleRRULE(
+  rrule: string | null
+): Partial<{
   freq: string;
   interval: number;
   byday: string[];
@@ -69,31 +92,27 @@ function parseSimpleRRULE(rrule: string | null): Partial<{
 export default function RecurrenceBuilder({ baseDate, value, onChange, disabled }: Props) {
   const parsed = useMemo(() => parseSimpleRRULE(value.rrule), [value.rrule]);
 
-  const [mode, setMode] = useState<Mode>(value.mode ?? "NONE");
+  const [mode, setMode] = useState<Mode>(value.mode ?? detectModeFromRRULE(value.rrule));
   const [interval, setInterval] = useState<number>(parsed.interval || 1);
-
   const [weeklyDays, setWeeklyDays] = useState<string[]>(
     parsed.byday && parsed.byday.length ? parsed.byday : []
   );
 
-  // End condition
   const [endType, setEndType] = useState<"NEVER" | "UNTIL">(value.untilDate ? "UNTIL" : "NEVER");
   const [untilDate, setUntilDate] = useState<string>(value.untilDate || "");
-
-  // Custom RRULE
   const [raw, setRaw] = useState<string>(value.raw || value.rrule || "");
 
-  // Keep local UI in sync when parent changes (click another event, etc.)
   useEffect(() => {
-    setMode(value.mode ?? (value.rrule ? "CUSTOM" : "NONE"));
+    const detected = value.mode ?? detectModeFromRRULE(value.rrule);
+    setMode(detected);
+
     const p = parseSimpleRRULE(value.rrule);
     setInterval(p.interval || 1);
     setWeeklyDays(p.byday && p.byday.length ? p.byday : []);
     setEndType(value.untilDate ? "UNTIL" : "NEVER");
     setUntilDate(value.untilDate || "");
     setRaw(value.raw || value.rrule || "");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value.rrule, value.untilDate, value.mode]);
+  }, [value.rrule, value.untilDate, value.mode, value.raw]);
 
   function buildRRULE(nextMode = mode) {
     if (nextMode === "NONE") return null;
@@ -107,13 +126,11 @@ export default function RecurrenceBuilder({ baseDate, value, onChange, disabled 
       const days = weeklyDays.length ? weeklyDays : ["MO"];
       return `FREQ=WEEKLY;INTERVAL=${iv};BYDAY=${days.join(",")}`;
     }
-    if (nextMode === "MONTHLY") {
-      // “zelfde dag van de maand” (eenvoudig en duidelijk)
-      return `FREQ=MONTHLY;INTERVAL=${iv};BYMONTHDAY=${dom}`;
-    }
-    if (nextMode === "YEARLY") {
-      return `FREQ=YEARLY;INTERVAL=${iv};BYMONTH=${moy};BYMONTHDAY=${dom}`;
-    }
+    if (nextMode === "WEEKLY_4") return "FREQ=WEEKLY;INTERVAL=4";
+    if (nextMode === "WEEKLY_6") return "FREQ=WEEKLY;INTERVAL=6";
+    if (nextMode === "WEEKLY_8") return "FREQ=WEEKLY;INTERVAL=8";
+    if (nextMode === "MONTHLY") return `FREQ=MONTHLY;INTERVAL=${iv};BYMONTHDAY=${dom}`;
+    if (nextMode === "YEARLY") return `FREQ=YEARLY;INTERVAL=${iv};BYMONTH=${moy};BYMONTHDAY=${dom}`;
     if (nextMode === "CUSTOM") {
       const r = (raw || "").trim();
       if (!r) return null;
@@ -137,12 +154,10 @@ export default function RecurrenceBuilder({ baseDate, value, onChange, disabled 
   function toggleWeekday(code: string) {
     setWeeklyDays((prev) => {
       const has = prev.includes(code);
-      const next = has ? prev.filter((x) => x !== code) : [...prev, code];
-      return next;
+      return has ? prev.filter((x) => x !== code) : [...prev, code];
     });
   }
 
-  // Whenever interval / weekdays / until changes, emit
   useEffect(() => {
     if (disabled) return;
     emit(mode);
@@ -154,66 +169,32 @@ export default function RecurrenceBuilder({ baseDate, value, onChange, disabled 
       <div>
         <label className="text-sm font-medium">Recurrentie</label>
         <select
-  className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2"
-  value={mode}
-  disabled={disabled}
-  onChange={(e) => {
-    const m = e.target.value as Mode | "W4" | "W6" | "W8";
-
-    if (m === "W4") {
-      onChange({
-        mode: "WEEKLY",
-        rrule: "FREQ=WEEKLY;INTERVAL=4",
-        untilDate,
-      });
-      setMode("WEEKLY");
-      setInterval(4);
-      return;
-    }
-
-    if (m === "W6") {
-      onChange({
-        mode: "WEEKLY",
-        rrule: "FREQ=WEEKLY;INTERVAL=6",
-        untilDate,
-      });
-      setMode("WEEKLY");
-      setInterval(6);
-      return;
-    }
-
-    if (m === "W8") {
-      onChange({
-        mode: "WEEKLY",
-        rrule: "FREQ=WEEKLY;INTERVAL=8",
-        untilDate,
-      });
-      setMode("WEEKLY");
-      setInterval(8);
-      return;
-    }
-
-    const modeValue = m as Mode;
-    setMode(modeValue);
-    if (modeValue !== "CUSTOM") setRaw("");
-    emit(modeValue);
-  }}
->
-  <option value="NONE">Geen recurrentie</option>
-  <option value="DAILY">Dagelijks</option>
-  <option value="WEEKLY">Wekelijks</option>
-
-  <option value="W4">Om de 4 weken</option>
-  <option value="W6">Om de 6 weken</option>
-  <option value="W8">Om de 8 weken</option>
-
-  <option value="MONTHLY">Maandelijks</option>
-  <option value="YEARLY">Jaarlijks</option>
-  <option value="CUSTOM">Geavanceerd (RRULE)</option>
-</select>
+          className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2"
+          value={mode}
+          disabled={disabled}
+          onChange={(e) => {
+            const m = e.target.value as Mode;
+            setMode(m);
+            if (m !== "CUSTOM") setRaw("");
+            emit(m);
+          }}
+        >
+          <option value="NONE">Geen recurrentie (éénmalig)</option>
+          <option value="DAILY">Dagelijks</option>
+          <option value="WEEKLY">Wekelijks</option>
+          <option value="WEEKLY_4">Om de 4 weken</option>
+          <option value="WEEKLY_6">Om de 6 weken</option>
+          <option value="WEEKLY_8">Om de 8 weken</option>
+          <option value="MONTHLY">Maandelijks (zelfde dag v/d maand)</option>
+          <option value="YEARLY">Jaarlijks (zelfde datum)</option>
+          <option value="CUSTOM">Geavanceerd (RRULE)</option>
+        </select>
       </div>
 
-      {mode !== "NONE" ? (
+      {mode !== "NONE" &&
+      mode !== "WEEKLY_4" &&
+      mode !== "WEEKLY_6" &&
+      mode !== "WEEKLY_8" ? (
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="text-sm font-medium">Elke</label>
@@ -236,6 +217,23 @@ export default function RecurrenceBuilder({ baseDate, value, onChange, disabled 
             </div>
           </div>
 
+          <div>
+            <label className="text-sm font-medium">Einde</label>
+            <select
+              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2"
+              value={endType}
+              disabled={disabled}
+              onChange={(e) => setEndType(e.target.value as any)}
+            >
+              <option value="NEVER">Nooit</option>
+              <option value="UNTIL">Tot datum</option>
+            </select>
+          </div>
+        </div>
+      ) : null}
+
+      {(mode === "WEEKLY_4" || mode === "WEEKLY_6" || mode === "WEEKLY_8") ? (
+        <div className="grid grid-cols-1 gap-2">
           <div>
             <label className="text-sm font-medium">Einde</label>
             <select
@@ -303,7 +301,6 @@ export default function RecurrenceBuilder({ baseDate, value, onChange, disabled 
             disabled={disabled}
             onChange={(e) => {
               setRaw(e.target.value);
-              // emit immediately
               onChange({
                 mode: "CUSTOM",
                 rrule: e.target.value.trim() ? e.target.value.trim().replace(/^RRULE:/i, "") : null,
@@ -312,10 +309,6 @@ export default function RecurrenceBuilder({ baseDate, value, onChange, disabled 
               });
             }}
           />
-          <div className="text-xs text-zinc-500 mt-2">
-            Voorbeelden: <code className="px-1 rounded bg-zinc-100">FREQ=WEEKLY;INTERVAL=2</code> of{" "}
-            <code className="px-1 rounded bg-zinc-100">FREQ=WEEKLY;BYDAY=MO,WE,FR</code>
-          </div>
         </div>
       ) : null}
 
