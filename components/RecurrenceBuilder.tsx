@@ -154,24 +154,63 @@ export default function RecurrenceBuilder({ baseDate, value, onChange, disabled 
       <div>
         <label className="text-sm font-medium">Recurrentie</label>
         <select
-          className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2"
-          value={mode}
-          disabled={disabled}
-          onChange={(e) => {
-            const m = e.target.value as Mode;
-            setMode(m);
-            // reasonable defaults
-            if (m !== "CUSTOM") setRaw("");
-            emit(m);
-          }}
-        >
-          <option value="NONE">Geen recurrentie (éénmalig)</option>
-          <option value="DAILY">Dagelijks</option>
-          <option value="WEEKLY">Wekelijks</option>
-          <option value="MONTHLY">Maandelijks (zelfde dag v/d maand)</option>
-          <option value="YEARLY">Jaarlijks (zelfde datum)</option>
-          <option value="CUSTOM">Geavanceerd (RRULE)</option>
-        </select>
+  className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2"
+  value={mode}
+  disabled={disabled}
+  onChange={(e) => {
+    const m = e.target.value as Mode | "W4" | "W6" | "W8";
+
+    if (m === "W4") {
+      onChange({
+        mode: "WEEKLY",
+        rrule: "FREQ=WEEKLY;INTERVAL=4",
+        untilDate,
+      });
+      setMode("WEEKLY");
+      setInterval(4);
+      return;
+    }
+
+    if (m === "W6") {
+      onChange({
+        mode: "WEEKLY",
+        rrule: "FREQ=WEEKLY;INTERVAL=6",
+        untilDate,
+      });
+      setMode("WEEKLY");
+      setInterval(6);
+      return;
+    }
+
+    if (m === "W8") {
+      onChange({
+        mode: "WEEKLY",
+        rrule: "FREQ=WEEKLY;INTERVAL=8",
+        untilDate,
+      });
+      setMode("WEEKLY");
+      setInterval(8);
+      return;
+    }
+
+    const modeValue = m as Mode;
+    setMode(modeValue);
+    if (modeValue !== "CUSTOM") setRaw("");
+    emit(modeValue);
+  }}
+>
+  <option value="NONE">Geen recurrentie</option>
+  <option value="DAILY">Dagelijks</option>
+  <option value="WEEKLY">Wekelijks</option>
+
+  <option value="W4">Om de 4 weken</option>
+  <option value="W6">Om de 6 weken</option>
+  <option value="W8">Om de 8 weken</option>
+
+  <option value="MONTHLY">Maandelijks</option>
+  <option value="YEARLY">Jaarlijks</option>
+  <option value="CUSTOM">Geavanceerd (RRULE)</option>
+</select>
       </div>
 
       {mode !== "NONE" ? (
