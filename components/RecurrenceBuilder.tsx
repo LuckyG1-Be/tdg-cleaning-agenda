@@ -37,20 +37,19 @@ const WEEKDAYS = [
   { key: "SU", label: "Zo" },
 ] as const;
 
-function detectModeFromRRULE(rrule: string | null): Mode {
-  if (!rrule) return "NONE";
-  const raw = rrule.replace(/^RRULE:/i, "").toUpperCase();
+function getWeekdayCode(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00");
+  const jsDay = d.getDay(); // 0=Sun ... 6=Sat
+  const map = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
+  return map[jsDay];
+}
 
-  if (raw === "FREQ=WEEKLY;INTERVAL=4") return "WEEKLY_4";
-  if (raw === "FREQ=WEEKLY;INTERVAL=6") return "WEEKLY_6";
-  if (raw === "FREQ=WEEKLY;INTERVAL=8") return "WEEKLY_8";
+function dayOfMonth(dateStr: string): number {
+  return new Date(dateStr + "T00:00:00").getDate();
+}
 
-  if (raw.startsWith("FREQ=DAILY")) return "DAILY";
-  if (raw.startsWith("FREQ=WEEKLY")) return "WEEKLY";
-  if (raw.startsWith("FREQ=MONTHLY")) return "MONTHLY";
-  if (raw.startsWith("FREQ=YEARLY")) return "YEARLY";
-
-  return "CUSTOM";
+function monthOfYear(dateStr: string): number {
+  return new Date(dateStr + "T00:00:00").getMonth() + 1;
 }
 
 function parseSimpleRRULE(
@@ -69,94 +68,101 @@ function parseSimpleRRULE(
   for (const p of parts) {
     const [k, v] = p.split("=");
     if (!k || !v) continue;
-    const K = k.toUpperCase();
-    if (K === "FREQ") out.freq = v.toUpperCase();
-    if (K === "INTERVAL") out.interval = Number(v) || 1;
-    if (K === "BYDAY") out.byday = v.split(",").map((x) => x.trim().toUpperCase()).filter(Boolean);
-    if (K === "BYMONTHDAY") out.bymonthday = Number(v);
-    if (K === "BYMONTH") out.bymonth = Number(v);
+    const key = k.toUpperCase();
+    if (key === "FREQ") out.freq = v.toUpperCase();
+    if (key === "INTERVAL") out.interval = Number(v) || 1;
+    if (key === "BYDAY") out.byday = v.split(",").map((x) => x.trim().toUpperCase()).filter(Boolean);
+    if (key === "BYMONTHDAY") out.bymonthday = Number(v);
+    if (key === "BYMONTH") out.bymonth = Number(v);
   }
   return out;
 }
 
-function dayOfMonth(yyyyMmDd: string) {
-  const d = new Date(yyyyMmDd + "T00:00:00");
-  return d.getDate();
-}
+function detectMode(rrule: string | null): Mode {
+  if (!rrule) return "NONE";
+  const p = parseSimpleRRULE(rrule);
 
-function monthOfYear(yyyyMmDd: string) {
-  const d = new Date(yyyyMmDd + "T00:00:00");
-  return d.getMonth() + 1;
+  if (p.freq === "WEEKLY" && p.interval === 4) return "WEEKLY_4";
+  if (p.freq === "WEEKLY" && p.interval === 6) return "WEEKLY_6";
+  if (p.freq === "WEEKLY" && p.interval === 8) return "WEEKLY_8";
+  if (p.freq === "DAILY") return "DAILY";
+  if (p.freq === "WEEKLY") return "WEEKLY";
+  if (p.freq === "MONTHLY") return "MONTHLY";
+  if (p.freq === "YEARLY") return "YEARLY";
+  return "CUSTOM";
 }
 
 export default function RecurrenceBuilder({ baseDate, value, onChange, disabled }: Props) {
   const parsed = useMemo(() => parseSimpleRRULE(value.rrule), [value.rrule]);
 
-  const [mode, setMode] = useState<Mode>(value.mode ?? detectModeFromRRULE(value.rrule));
+  const [mode, setMode] = useState<Mode>(value.mode || detectMode(value.rrule));
   const [interval, setInterval] = useState<number>(parsed.interval || 1);
-  const [weeklyDays, setWeeklyDays] = useState<string[]>(parsed.byday && parsed.byday.length ? parsed.byday : []);
+  const [weeklyDays, setWeeklyDays] = useState<string[]>(
+    parsed.byday && parsed.byday.length ? parsed.byday : [getWeekdayCode(baseDate)]
+  );
   const [endType, setEndType] = useState<"NEVER" | "UNTIL">(value.untilDate ? "UNTIL" : "NEVER");
   const [untilDate, setUntilDate] = useState<string>(value.untilDate || "");
   const [raw, setRaw] = useState<string>(value.raw || value.rrule || "");
 
   useEffect(() => {
-    const detected = value.mode ?? detectModeFromRRULE(value.rrule);
+    const detected = value.mode || detectMode(value.rrule);
     const p = parseSimpleRRULE(value.rrule);
 
     setMode(detected);
     setInterval(p.interval || 1);
-    setWeeklyDays(p.byday && p.byday.length ? p.byday : []);
+    setWeeklyDays(p.byday && p.byday.length ? p.byday : [getWeekdayCode(baseDate)]);
     setEndType(value.untilDate ? "UNTIL" : "NEVER");
     setUntilDate(value.untilDate || "");
     setRaw(value.raw || value.rrule || "");
-  }, [value.rrule, value.untilDate, value.mode, value.raw]);
+  }, [value.rrule, value.untilDate, value.mode, value.raw, baseDate]);
 
-  function emit(next: {
-    mode?: Mode;
-    interval?: number;
-    weeklyDays?: string[];
-    endType?: "NEVER" | "UNTIL";
-    untilDate?: string;
-    raw?: string;
+  function buildAndEmit(next: {
+    nextMode?: Mode;
+    nextInterval?: number;
+    nextWeeklyDays?: string[];
+    nextEndType?: "NEVER" | "UNTIL";
+    nextUntilDate?: string;
+    nextRaw?: string;
   } = {}) {
-    const nextMode = next.mode ?? mode;
-    const nextInterval = next.interval ?? interval;
-    const nextWeeklyDays = next.weeklyDays ?? weeklyDays;
-    const nextEndType = next.endType ?? endType;
-    const nextUntilDate = next.untilDate ?? untilDate;
-    const nextRaw = next.raw ?? raw;
+    const m = next.nextMode ?? mode;
+    const iv = next.nextInterval ?? interval;
+    const wd = next.nextWeeklyDays ?? weeklyDays;
+    const et = next.nextEndType ?? endType;
+    const ud = next.nextUntilDate ?? untilDate;
+    const rw = next.nextRaw ?? raw;
 
+    const baseWeekday = getWeekdayCode(baseDate);
     const dom = dayOfMonth(baseDate);
     const moy = monthOfYear(baseDate);
 
     let rrule: string | null = null;
 
-    if (nextMode === "NONE") {
+    if (m === "NONE") {
       rrule = null;
-    } else if (nextMode === "DAILY") {
-      rrule = `FREQ=DAILY;INTERVAL=${Math.max(1, nextInterval)}`;
-    } else if (nextMode === "WEEKLY") {
-      const days = nextWeeklyDays.length ? nextWeeklyDays : ["MO"];
-      rrule = `FREQ=WEEKLY;INTERVAL=${Math.max(1, nextInterval)};BYDAY=${days.join(",")}`;
-    } else if (nextMode === "WEEKLY_4") {
-      rrule = "FREQ=WEEKLY;INTERVAL=4";
-    } else if (nextMode === "WEEKLY_6") {
-      rrule = "FREQ=WEEKLY;INTERVAL=6";
-    } else if (nextMode === "WEEKLY_8") {
-      rrule = "FREQ=WEEKLY;INTERVAL=8";
-    } else if (nextMode === "MONTHLY") {
-      rrule = `FREQ=MONTHLY;INTERVAL=${Math.max(1, nextInterval)};BYMONTHDAY=${dom}`;
-    } else if (nextMode === "YEARLY") {
-      rrule = `FREQ=YEARLY;INTERVAL=${Math.max(1, nextInterval)};BYMONTH=${moy};BYMONTHDAY=${dom}`;
-    } else if (nextMode === "CUSTOM") {
-      rrule = nextRaw.trim() ? nextRaw.trim().replace(/^RRULE:/i, "") : null;
+    } else if (m === "DAILY") {
+      rrule = `FREQ=DAILY;INTERVAL=${Math.max(1, iv)}`;
+    } else if (m === "WEEKLY") {
+      const days = wd.length ? wd : [baseWeekday];
+      rrule = `FREQ=WEEKLY;INTERVAL=${Math.max(1, iv)};BYDAY=${days.join(",")}`;
+    } else if (m === "WEEKLY_4") {
+      rrule = `FREQ=WEEKLY;INTERVAL=4;BYDAY=${baseWeekday}`;
+    } else if (m === "WEEKLY_6") {
+      rrule = `FREQ=WEEKLY;INTERVAL=6;BYDAY=${baseWeekday}`;
+    } else if (m === "WEEKLY_8") {
+      rrule = `FREQ=WEEKLY;INTERVAL=8;BYDAY=${baseWeekday}`;
+    } else if (m === "MONTHLY") {
+      rrule = `FREQ=MONTHLY;INTERVAL=${Math.max(1, iv)};BYMONTHDAY=${dom}`;
+    } else if (m === "YEARLY") {
+      rrule = `FREQ=YEARLY;INTERVAL=${Math.max(1, iv)};BYMONTH=${moy};BYMONTHDAY=${dom}`;
+    } else if (m === "CUSTOM") {
+      rrule = rw.trim() ? rw.trim().replace(/^RRULE:/i, "") : null;
     }
 
     onChange({
-      mode: nextMode,
+      mode: m,
       rrule,
-      untilDate: nextEndType === "UNTIL" ? (nextUntilDate || null) : null,
-      raw: nextMode === "CUSTOM" ? nextRaw : undefined,
+      untilDate: et === "UNTIL" ? (ud || null) : null,
+      raw: m === "CUSTOM" ? rw : undefined,
     });
   }
 
@@ -166,8 +172,14 @@ export default function RecurrenceBuilder({ baseDate, value, onChange, disabled 
       : [...weeklyDays, code];
 
     setWeeklyDays(nextDays);
-    emit({ weeklyDays: nextDays });
+    buildAndEmit({ nextWeeklyDays: nextDays });
   }
+
+  const showInterval =
+    mode !== "NONE" &&
+    mode !== "WEEKLY_4" &&
+    mode !== "WEEKLY_6" &&
+    mode !== "WEEKLY_8";
 
   return (
     <div className="space-y-3">
@@ -181,7 +193,13 @@ export default function RecurrenceBuilder({ baseDate, value, onChange, disabled 
             const nextMode = e.target.value as Mode;
             setMode(nextMode);
             if (nextMode !== "CUSTOM") setRaw("");
-            emit({ mode: nextMode, raw: nextMode !== "CUSTOM" ? "" : raw });
+            if (nextMode === "WEEKLY" && weeklyDays.length === 0) {
+              const baseWd = [getWeekdayCode(baseDate)];
+              setWeeklyDays(baseWd);
+              buildAndEmit({ nextMode, nextWeeklyDays: baseWd, nextRaw: "" });
+              return;
+            }
+            buildAndEmit({ nextMode, nextRaw: "" });
           }}
         >
           <option value="NONE">Geen recurrentie (éénmalig)</option>
@@ -196,10 +214,7 @@ export default function RecurrenceBuilder({ baseDate, value, onChange, disabled 
         </select>
       </div>
 
-      {mode !== "NONE" &&
-      mode !== "WEEKLY_4" &&
-      mode !== "WEEKLY_6" &&
-      mode !== "WEEKLY_8" ? (
+      {showInterval ? (
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="text-sm font-medium">Elke</label>
@@ -213,7 +228,7 @@ export default function RecurrenceBuilder({ baseDate, value, onChange, disabled 
                 onChange={(e) => {
                   const nextInterval = Number(e.target.value) || 1;
                   setInterval(nextInterval);
-                  emit({ interval: nextInterval });
+                  buildAndEmit({ nextInterval });
                 }}
               />
               <div className="text-sm text-zinc-600">
@@ -235,7 +250,7 @@ export default function RecurrenceBuilder({ baseDate, value, onChange, disabled 
               onChange={(e) => {
                 const nextEndType = e.target.value as "NEVER" | "UNTIL";
                 setEndType(nextEndType);
-                emit({ endType: nextEndType });
+                buildAndEmit({ nextEndType });
               }}
             >
               <option value="NEVER">Nooit</option>
@@ -243,9 +258,7 @@ export default function RecurrenceBuilder({ baseDate, value, onChange, disabled 
             </select>
           </div>
         </div>
-      ) : null}
-
-      {(mode === "WEEKLY_4" || mode === "WEEKLY_6" || mode === "WEEKLY_8") ? (
+      ) : mode !== "NONE" ? (
         <div>
           <label className="text-sm font-medium">Einde</label>
           <select
@@ -255,7 +268,7 @@ export default function RecurrenceBuilder({ baseDate, value, onChange, disabled 
             onChange={(e) => {
               const nextEndType = e.target.value as "NEVER" | "UNTIL";
               setEndType(nextEndType);
-              emit({ endType: nextEndType });
+              buildAndEmit({ nextEndType });
             }}
           >
             <option value="NEVER">Nooit</option>
@@ -301,7 +314,7 @@ export default function RecurrenceBuilder({ baseDate, value, onChange, disabled 
             onChange={(e) => {
               const nextUntilDate = e.target.value;
               setUntilDate(nextUntilDate);
-              emit({ untilDate: nextUntilDate });
+              buildAndEmit({ nextUntilDate });
             }}
           />
         </div>
@@ -318,7 +331,7 @@ export default function RecurrenceBuilder({ baseDate, value, onChange, disabled 
             onChange={(e) => {
               const nextRaw = e.target.value;
               setRaw(nextRaw);
-              emit({ raw: nextRaw });
+              buildAndEmit({ nextRaw });
             }}
           />
         </div>
