@@ -2,5 +2,175 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: light; }
-html, body { height: 100%; }
+:root {
+  color-scheme: light;
+  --tdg-ink: #0a3148;
+  --tdg-blue: #2f95ca;
+  --tdg-soft: #eef7fb;
+}
+html, body { min-height: 100%; }
+body { background: #f7f9fa; }
+
+@layer components {
+  .tdg-input {
+    @apply w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none transition;
+  }
+  .tdg-input:focus { @apply border-sky-400 ring-4 ring-sky-100; }
+
+  .tdg-btn-primary {
+    @apply inline-flex items-center justify-center rounded-xl bg-[#0a3148] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#123f5a] disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .tdg-btn-secondary {
+    @apply inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-700 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-800;
+  }
+  .tdg-btn-danger {
+    @apply inline-flex items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50;
+  }
+  .tdg-btn-small {
+    @apply inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-50;
+  }
+  .tdg-stat {
+    @apply rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm;
+  }
+  .tdg-stat span { @apply block text-[11px] font-semibold uppercase tracking-[.1em] text-zinc-500; }
+  .tdg-stat strong { @apply mt-1 block text-2xl font-semibold tracking-tight text-[#0a3148]; }
+  .tdg-stat small { @apply mt-0.5 block truncate text-xs text-zinc-500; }
+
+  .tdg-chip {
+    @apply shrink-0 rounded-full bg-zinc-100 px-2 py-1 text-[10px] font-semibold text-zinc-500;
+  }
+  .tdg-kicker {
+    @apply text-[10px] font-bold uppercase tracking-[.14em] text-sky-600;
+  }
+  .tdg-alert {
+    @apply rounded-xl border px-4 py-3 text-sm;
+  }
+  .tdg-alert-success { @apply border-emerald-200 bg-emerald-50 text-emerald-800; }
+  .tdg-alert-error { @apply border-red-200 bg-red-50 text-red-700; }
+
+  .tdg-form-section {
+    @apply rounded-2xl border border-zinc-100 bg-zinc-50/60 p-4;
+  }
+  .tdg-form-title {
+    @apply mb-3 text-xs font-bold uppercase tracking-[.1em] text-zinc-500;
+  }
+  .tdg-form-section label > span,
+  form label > span {
+    @apply text-sm font-medium text-zinc-700;
+  }
+
+  .tdg-customer-selected {
+    @apply flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 p-3;
+  }
+  .tdg-customer-selected > button:first-child { @apply flex-1 overflow-hidden; }
+  .tdg-customer-selected strong { @apply block truncate text-sm text-sky-950; }
+  .tdg-customer-selected span { @apply mt-0.5 block truncate text-xs text-sky-700; }
+  .tdg-customer-selected > button:last-child { @apply grid h-8 w-8 shrink-0 place-items-center rounded-lg text-sky-700 hover:bg-white; }
+
+  .tdg-picker-popover {
+    @apply absolute z-50 mt-2 w-full overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl;
+  }
+  .tdg-picker-head { @apply flex gap-2 border-b border-zinc-100 p-2; }
+  .tdg-picker-list { @apply max-h-72 overflow-auto p-2; }
+  .tdg-picker-list button { @apply block w-full rounded-xl px-3 py-2.5 text-left hover:bg-zinc-50; }
+  .tdg-picker-list strong { @apply block text-sm text-zinc-900; }
+  .tdg-picker-list span { @apply mt-0.5 block truncate text-xs text-zinc-500; }
+  .tdg-picker-close { @apply w-full border-t border-zinc-100 py-2 text-xs font-medium text-zinc-500 hover:bg-zinc-50; }
+
+  .tdg-selected-customer-card {
+    @apply rounded-xl border border-zinc-200 bg-zinc-50 p-3;
+  }
+  .tdg-selected-customer-card strong { @apply block text-sm text-zinc-900; }
+  .tdg-selected-customer-card span { @apply mt-0.5 block text-xs text-zinc-500; }
+  .tdg-selected-customer-card a { @apply mt-1 inline-block text-xs font-semibold text-sky-700 hover:underline; }
+
+  .tdg-duration {
+    @apply rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-600 hover:border-sky-200 hover:bg-sky-50 hover:text-sky-800;
+  }
+  .tdg-conflict {
+    @apply rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900;
+  }
+  .tdg-conflict strong { @apply block text-sm; }
+  .tdg-conflict span, .tdg-conflict small { @apply mt-1 block text-xs; }
+
+  .tdg-recurrence-details {
+    @apply rounded-xl border border-zinc-200 bg-zinc-50/70 p-3;
+  }
+  .tdg-recurrence-details summary {
+    @apply flex cursor-pointer list-none items-center justify-between text-sm font-semibold text-zinc-700;
+  }
+  .tdg-recurrence-details summary::-webkit-details-marker { display: none; }
+  .tdg-recurrence-details summary span { @apply text-xs font-medium text-zinc-400; }
+
+  .tdg-upcoming-row {
+    @apply grid w-full grid-cols-[42px_minmax(0,1fr)_20px] items-center gap-3 py-3 text-left hover:bg-zinc-50;
+  }
+  .tdg-upcoming-date {
+    @apply flex h-11 flex-col items-center justify-center rounded-xl bg-sky-50 text-sky-900;
+  }
+  .tdg-upcoming-date strong { @apply text-sm leading-none; }
+  .tdg-upcoming-date span { @apply mt-1 text-[9px] uppercase; }
+  .tdg-upcoming-row > div:nth-child(2) strong { @apply block truncate text-sm text-zinc-900; }
+  .tdg-upcoming-row > div:nth-child(2) span { @apply mt-0.5 block truncate text-xs text-zinc-500; }
+  .tdg-upcoming-row > div:nth-child(2) small { @apply mt-1 block truncate text-xs text-zinc-400; }
+  .tdg-upcoming-row > b { @apply text-zinc-300; }
+}
+
+/* FullCalendar polish */
+.tdg-calendar-shell .fc {
+  --fc-border-color: #edf0f2;
+  --fc-button-bg-color: #0a3148;
+  --fc-button-border-color: #0a3148;
+  --fc-button-hover-bg-color: #123f5a;
+  --fc-button-hover-border-color: #123f5a;
+  --fc-button-active-bg-color: #2f95ca;
+  --fc-button-active-border-color: #2f95ca;
+  --fc-today-bg-color: #f3f9fc;
+  font-size: 13px;
+}
+.tdg-calendar-shell .fc .fc-toolbar-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #183d52;
+}
+.tdg-calendar-shell .fc .fc-button {
+  border-radius: 9px;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 650;
+  padding: .42rem .65rem;
+}
+.tdg-calendar-shell .fc .fc-col-header-cell-cushion {
+  padding: 9px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #607784;
+}
+.tdg-calendar-shell .fc .fc-timegrid-slot-label-cushion {
+  font-size: 10px;
+  color: #8a9aa2;
+}
+.tdg-calendar-shell .fc .fc-event {
+  border: 0;
+  border-left: 3px solid #0a3148;
+  border-radius: 7px;
+  background: #dff1fa;
+  color: #0a3148;
+  box-shadow: 0 2px 8px rgba(10,49,72,.08);
+}
+.tdg-calendar-shell .fc .fc-event-main { color: inherit; }
+.tdg-calendar-shell .fc .fc-highlight { background: rgba(47,149,202,.16); }
+
+@media (max-width: 760px) {
+  .tdg-calendar-shell .fc .fc-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .tdg-calendar-shell .fc .fc-toolbar-chunk:last-child {
+    width: 100%;
+    display: flex;
+  }
+  .tdg-calendar-shell .fc .fc-toolbar-chunk:last-child .fc-button-group { width: 100%; }
+  .tdg-calendar-shell .fc .fc-toolbar-chunk:last-child .fc-button { flex: 1; }
+}
