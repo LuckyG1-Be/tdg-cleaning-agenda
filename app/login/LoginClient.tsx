@@ -25,58 +25,70 @@ export default function LoginClient() {
         body: JSON.stringify({ username, password }),
       });
       const j = await r.json();
-      if (!j.ok) throw new Error(j.error || "Login mislukt");
+      if (!r.ok || !j.ok) throw new Error(j.error || "Aanmelden mislukt");
       router.replace(next);
       router.refresh();
     } catch (e: any) {
-      setErr(e?.message || "Login mislukt");
+      setErr(e?.message || "Aanmelden mislukt");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <main className="min-h-screen grid place-items-center p-6">
-      <div className="w-full max-w-sm bg-white rounded-2xl border border-zinc-200 shadow-sm p-6">
-        <div className="mb-4">
-          <div className="text-xl font-semibold">TDG Cleaning</div>
-          <div className="text-sm text-zinc-500">Log in om je agenda te beheren</div>
+    <main className="min-h-screen grid place-items-center p-5 bg-[radial-gradient(circle_at_top_left,_#eef8fc,_#f7f9fa_44%,_#eef2f4)]">
+      <div className="w-full max-w-md">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="h-11 w-11 rounded-xl bg-[#0a3148] text-white grid place-items-center font-black tracking-[-.04em] shadow-sm">TDG</div>
+          <div>
+            <div className="font-semibold text-zinc-900">TDG Cleaning</div>
+            <div className="text-xs text-zinc-500">Planning & klanten</div>
+          </div>
         </div>
 
-        <form onSubmit={submit} className="space-y-3">
-          <div>
-            <label className="text-sm font-medium">Gebruikersnaam</label>
-            <input
-              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 outline-none focus:ring-2 focus:ring-zinc-900/10"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              autoComplete="username"
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium">Wachtwoord</label>
-            <input
-              type="password"
-              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 outline-none focus:ring-2 focus:ring-zinc-900/10"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-            />
+        <div className="bg-white rounded-3xl border border-zinc-200 shadow-[0_24px_80px_rgba(10,49,72,.10)] p-6 md:p-7">
+          <div className="mb-5">
+            <div className="tdg-kicker">Beveiligde omgeving</div>
+            <h1 className="text-3xl font-semibold tracking-tight mt-1">Welkom terug.</h1>
+            <p className="text-sm text-zinc-500 mt-2">Meld je aan om de agenda en klantendatabase te beheren.</p>
           </div>
 
-          {err ? <div className="text-sm text-red-600">{err}</div> : null}
+          <form onSubmit={submit} className="space-y-4">
+            <label className="block">
+              <span>Gebruikersnaam</span>
+              <input
+                className="tdg-input mt-1"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                autoFocus
+                required
+              />
+            </label>
 
-          <button
-            disabled={busy}
-            className="w-full rounded-xl bg-zinc-900 text-white py-2 font-medium hover:bg-zinc-800 disabled:opacity-60"
-          >
-            {busy ? "Bezig..." : "Inloggen"}
-          </button>
+            <label className="block">
+              <span>Wachtwoord</span>
+              <input
+                type="password"
+                className="tdg-input mt-1"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                required
+              />
+            </label>
 
-          <div className="text-xs text-zinc-500">
-            Tip: login is enkel voor de eigenaar (geen registratie).
-          </div>
-        </form>
+            {err ? <div className="tdg-alert tdg-alert-error">{err}</div> : null}
+
+            <button disabled={busy} className="tdg-btn-primary w-full py-3">
+              {busy ? "Aanmelden…" : "Aanmelden"}
+            </button>
+
+            <p className="text-xs text-zinc-400 text-center">
+              Alleen toegankelijk voor geautoriseerde beheerders.
+            </p>
+          </form>
+        </div>
       </div>
     </main>
   );
