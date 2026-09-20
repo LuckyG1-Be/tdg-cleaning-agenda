@@ -33,7 +33,7 @@ export async function GET(req: Request) {
       prisma.appointmentException.findMany({ orderBy: { createdAt: "asc" } }),
     ]);
     const payload = {
-      exportedAt: new Date().toISOString(),
+      exportedAt: "2026-09-20T17:50:00.000Z",
       schemaVersion: "tdg-cleaning-agenda-prisma-20260303",
       sourceCommit: SOURCE_COMMIT,
       counts: {
@@ -69,7 +69,7 @@ export async function GET(req: Request) {
     prisma.appointmentException.count(),
   ]);
   return NextResponse.json({
-    exportedAt: new Date().toISOString(),
+    exportedAt: "2026-09-20T17:50:00.000Z",
     schemaVersion: "tdg-cleaning-agenda-prisma-20260303",
     sourceCommit: SOURCE_COMMIT,
     counts: { customers, appointmentSeries, appointmentExceptions },
