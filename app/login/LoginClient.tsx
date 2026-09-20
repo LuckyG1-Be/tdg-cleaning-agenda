@@ -6,7 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 export default function LoginClient() {
   const router = useRouter();
   const sp = useSearchParams();
-  const next = sp.get("next") || "/agenda";
+  const rawNext = sp.get("next") || "/agenda";
+  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/agenda";
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
