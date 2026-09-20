@@ -6,6 +6,7 @@ type Mode =
   | "NONE"
   | "DAILY"
   | "WEEKLY"
+  | "WEEKLY_2"
   | "WEEKLY_4"
   | "WEEKLY_6"
   | "WEEKLY_8"
@@ -82,6 +83,7 @@ function detectMode(rrule: string | null): Mode {
   if (!rrule) return "NONE";
   const p = parseSimpleRRULE(rrule);
 
+  if (p.freq === "WEEKLY" && p.interval === 2) return "WEEKLY_2";
   if (p.freq === "WEEKLY" && p.interval === 4) return "WEEKLY_4";
   if (p.freq === "WEEKLY" && p.interval === 6) return "WEEKLY_6";
   if (p.freq === "WEEKLY" && p.interval === 8) return "WEEKLY_8";
@@ -144,6 +146,8 @@ export default function RecurrenceBuilder({ baseDate, value, onChange, disabled 
     } else if (m === "WEEKLY") {
       const days = wd.length ? wd : [baseWeekday];
       rrule = `FREQ=WEEKLY;INTERVAL=${Math.max(1, iv)};BYDAY=${days.join(",")}`;
+    } else if (m === "WEEKLY_2") {
+      rrule = `FREQ=WEEKLY;INTERVAL=2;BYDAY=${baseWeekday}`;
     } else if (m === "WEEKLY_4") {
       rrule = `FREQ=WEEKLY;INTERVAL=4;BYDAY=${baseWeekday}`;
     } else if (m === "WEEKLY_6") {
@@ -177,6 +181,7 @@ export default function RecurrenceBuilder({ baseDate, value, onChange, disabled 
 
   const showInterval =
     mode !== "NONE" &&
+    mode !== "WEEKLY_2" &&
     mode !== "WEEKLY_4" &&
     mode !== "WEEKLY_6" &&
     mode !== "WEEKLY_8";
@@ -205,6 +210,7 @@ export default function RecurrenceBuilder({ baseDate, value, onChange, disabled 
           <option value="NONE">Geen recurrentie (éénmalig)</option>
           <option value="DAILY">Dagelijks</option>
           <option value="WEEKLY">Wekelijks</option>
+          <option value="WEEKLY_2">Om de 2 weken</option>
           <option value="WEEKLY_4">Om de 4 weken</option>
           <option value="WEEKLY_6">Om de 6 weken</option>
           <option value="WEEKLY_8">Om de 8 weken</option>

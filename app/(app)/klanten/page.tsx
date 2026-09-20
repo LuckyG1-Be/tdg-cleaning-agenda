@@ -11,8 +11,11 @@ export default function KlantenPage() {
       <Topbar />
       <Container>
         <div className="mb-4">
-          <h1 className="text-2xl font-semibold">Klanten</h1>
-          <p className="text-sm text-zinc-500">Beheer je klantendatabase (geen verplichte velden).</p>
+          <div className="tdg-kicker">Relatiebeheer</div>
+          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight mt-1">Klanten</h1>
+          <p className="text-sm text-zinc-500 mt-1">
+            Beheer klantgegevens en plan vanuit één klik een nieuwe afspraak.
+          </p>
         </div>
         <CustomersClient />
       </Container>
