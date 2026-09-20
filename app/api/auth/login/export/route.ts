@@ -52,6 +52,27 @@ export async function GET(req: Request) {
     });
   }
 
+  if (format === "db-json") {
+    const [customers, appointmentSeries, appointmentExceptions] = await Promise.all([
+      prisma.customer.findMany({ orderBy: { createdAt: "asc" } }),
+      prisma.appointmentSeries.findMany({ orderBy: { createdAt: "asc" } }),
+      prisma.appointmentException.findMany({ orderBy: { createdAt: "asc" } }),
+    ]);
+    return NextResponse.json({
+      exportedAt: "2026-09-20T17:50:00.000Z",
+      schemaVersion: "tdg-cleaning-agenda-prisma-20260303",
+      sourceCommit: SOURCE_COMMIT,
+      counts: {
+        customers: customers.length,
+        appointmentSeries: appointmentSeries.length,
+        appointmentExceptions: appointmentExceptions.length,
+      },
+      customers,
+      appointmentSeries,
+      appointmentExceptions,
+    }, { headers: { "Cache-Control": "no-store, max-age=0" } });
+  }
+
   if (format === "source-zip-base64") {
     const sourceUrl = `https://codeload.github.com/LuckyG1-Be/tdg-cleaning-agenda/zip/${SOURCE_COMMIT}`;
     const source = await fetch(sourceUrl, { cache: "no-store" });
