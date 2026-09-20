@@ -94,7 +94,7 @@ function recurrenceFromCustomer(raw: string | null | undefined, baseDate: string
   const d = new Date(baseDate + "T00:00:00");
   const wd = weekdayMap[d.getDay()];
   if (v === "WEEKLY") return { mode:"WEEKLY", rrule:`FREQ=WEEKLY;INTERVAL=1;BYDAY=${wd}`, untilDate:null };
-  if (v === "2W") return { mode:"CUSTOM", rrule:`FREQ=WEEKLY;INTERVAL=2;BYDAY=${wd}`, untilDate:null, raw:`FREQ=WEEKLY;INTERVAL=2;BYDAY=${wd}` };
+  if (v === "2W") return { mode:"WEEKLY_2", rrule:`FREQ=WEEKLY;INTERVAL=2;BYDAY=${wd}`, untilDate:null };
   if (v === "4W") return { mode:"WEEKLY_4", rrule:`FREQ=WEEKLY;INTERVAL=4;BYDAY=${wd}`, untilDate:null };
   if (v === "6W") return { mode:"WEEKLY_6", rrule:`FREQ=WEEKLY;INTERVAL=6;BYDAY=${wd}`, untilDate:null };
   if (v === "8W") return { mode:"WEEKLY_8", rrule:`FREQ=WEEKLY;INTERVAL=8;BYDAY=${wd}`, untilDate:null };
