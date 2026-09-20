@@ -22,30 +22,33 @@ export async function GET(req: Request) {
     return new NextResponse("Not found", { status: 404 });
   }
 
-  const [customers, series, exceptions] = await Promise.all([
-    prisma.customer.findMany({ orderBy: { createdAt: "asc" } }),
-    prisma.appointmentSeries.findMany({ orderBy: { createdAt: "asc" } }),
-    prisma.appointmentException.findMany({ orderBy: { createdAt: "asc" } }),
-  ]);
+  const table = url.searchParams.get("table") || "meta";
+  const skip = Math.max(0, Number(url.searchParams.get("skip") || "0") || 0);
+  const take = Math.min(50, Math.max(1, Number(url.searchParams.get("take") || "40") || 40));
 
-  return NextResponse.json(
-    {
-      exportedAt: new Date().toISOString(),
-      schemaVersion: "tdg-cleaning-agenda-prisma-20260303",
-      counts: {
-        customers: customers.length,
-        appointmentSeries: series.length,
-        appointmentExceptions: exceptions.length,
-      },
-      customers,
-      appointmentSeries: series,
-      appointmentExceptions: exceptions,
-    },
-    {
-      headers: {
-        "Cache-Control": "no-store, max-age=0",
-        "Content-Disposition": 'attachment; filename="tdg-cleaning-db-export.json"',
-      },
-    }
-  );
+  if (table === "meta") {
+    const [customers, appointmentSeries, appointmentExceptions] = await Promise.all([
+      prisma.customer.count(),
+      prisma.appointmentSeries.count(),
+      prisma.appointmentException.count(),
+    ]);
+    return NextResponse.json({ exportedAt: new Date().toISOString(), schemaVersion: "tdg-cleaning-agenda-prisma-20260303", counts: { customers, appointmentSeries, appointmentExceptions } }, { headers: { "Cache-Control": "no-store, max-age=0" } });
+  }
+
+  if (table === "customers") {
+    const items = await prisma.customer.findMany({ orderBy: { createdAt: "asc" }, skip, take });
+    return NextResponse.json({ table, skip, take, items }, { headers: { "Cache-Control": "no-store, max-age=0" } });
+  }
+
+  if (table === "series") {
+    const items = await prisma.appointmentSeries.findMany({ orderBy: { createdAt: "asc" }, skip, take });
+    return NextResponse.json({ table, skip, take, items }, { headers: { "Cache-Control": "no-store, max-age=0" } });
+  }
+
+  if (table === "exceptions") {
+    const items = await prisma.appointmentException.findMany({ orderBy: { createdAt: "asc" }, skip, take });
+    return NextResponse.json({ table, skip, take, items }, { headers: { "Cache-Control": "no-store, max-age=0" } });
+  }
+
+  return new NextResponse("Not found", { status: 404 });
 }
